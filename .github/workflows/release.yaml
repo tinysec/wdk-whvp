@@ -1,0 +1,122 @@
+name: package
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - "**"
+
+env:
+  WHVP_VERSION: 10.0.28000.0
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+
+      - name: validate tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "${TAG_VERSION}" != "${WHVP_VERSION}" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match WHVP_VERSION ${WHVP_VERSION}"
+            exit 1
+          fi
+
+      - name: verify package contents
+        shell: bash
+        run: |
+          test -f include/WinHvCompat.h
+          test -f include/WinHvPlatformDefs.h
+          test -f include/WinHvPlatform.h
+          test -f include/WinHvEmulation.h
+          test -f lib/amd64/WinHvPlatform.lib
+          test -f lib/amd64/WinHvEmulation.lib
+          if find lib -name '*.def' -print -quit | grep -q .; then
+            echo "::error::.def files must not be committed"
+            exit 1
+          fi
+
+      - name: configure
+        run: cmake -S . -B build -DWHVP_INSTALL=ON
+
+      - name: install
+        run: cmake --install build --prefix install
+
+      - name: verify installed package
+        shell: bash
+        run: |
+          test -f install/include/WinHvCompat.h
+          test -f install/include/WinHvPlatformDefs.h
+          test -f install/include/WinHvPlatform.h
+          test -f install/include/WinHvEmulation.h
+          test -f install/lib/amd64/WinHvPlatform.lib
+          test -f install/lib/amd64/WinHvEmulation.lib
+          test -f install/lib/cmake/whvp/whvpConfig.cmake
+          test -f install/lib/cmake/whvp/whvpConfigVersion.cmake
+          if find install -name '*.def' -print -quit | grep -q .; then
+            echo "::error::.def files must not be installed"
+            exit 1
+          fi
+
+      - name: verify find_package
+        shell: bash
+        run: |
+          mkdir smoke
+          cat > smoke/CMakeLists.txt <<'EOF'
+          cmake_minimum_required(VERSION 3.20)
+          project(whvp_smoke LANGUAGES C)
+          find_package(whvp 10.0.28000.0 EXACT CONFIG REQUIRED)
+          foreach(target IN ITEMS whvp::whvp whvp::emu)
+            if(NOT TARGET ${target})
+              message(FATAL_ERROR "Missing target: ${target}")
+            endif()
+          endforeach()
+          EOF
+          cmake -S smoke -B smoke-build -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/install"
+
+      - name: package
+        shell: bash
+        run: |
+          mkdir -p dist
+          cd install
+          cmake -E tar cf "${GITHUB_WORKSPACE}/dist/wdk-whvp-v${WHVP_VERSION}.zip" --format=zip -- .
+          cd "${GITHUB_WORKSPACE}"
+          ls -la dist
+
+      - name: upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wdk-whvp-dist
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: package
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wdk-whvp-dist
+          path: dist
+
+      - name: create release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: |
+            dist/*
