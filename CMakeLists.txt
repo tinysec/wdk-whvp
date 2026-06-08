@@ -8,6 +8,13 @@ else()
     set(_whvp_is_top_level FALSE)
 endif()
 
+if(NOT DEFINED CMAKE_INSTALL_INCLUDEDIR)
+    set(CMAKE_INSTALL_INCLUDEDIR "include" CACHE PATH "Header install directory")
+endif()
+if(NOT DEFINED CMAKE_INSTALL_LIBDIR)
+    set(CMAKE_INSTALL_LIBDIR "lib" CACHE PATH "Library install directory")
+endif()
+
 include(GNUInstallDirs)
 
 option(WHVP_INSTALL "Install the whvp CMake package" "${_whvp_is_top_level}")
