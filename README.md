@@ -22,8 +22,7 @@ on newer API-set and WinAPI-family headers that are unavailable in WDK 7.
 - amd64 import library for `C:\Windows\System32\WinHvEmulation.dll`.
 - No bundled source code, generated code, submodules, or configure-time
   downloads.
-- Installable CMake package with `whvp::whvp`, `whvp::WinHvPlatform`, and
-  `whvp::WinHvEmulation` targets.
+- Installable CMake package with `whvp::whvp` and `whvp::emu` targets.
 - amd64 only.
 
 ## CMake Usage
@@ -50,9 +49,9 @@ find_package(whvp 10.0 CONFIG REQUIRED)
 target_link_libraries(your_target PRIVATE whvp::whvp)
 ```
 
-`whvp::whvp` links `WinHvPlatform.lib`. Link `whvp::WinHvEmulation` separately
-when using the emulator API:
+`whvp::whvp` links `WinHvPlatform.lib`. Link `whvp::emu` separately when using
+the emulator API:
 
 ```cmake
-target_link_libraries(your_target PRIVATE whvp::whvp whvp::WinHvEmulation)
+target_link_libraries(your_target PRIVATE whvp::whvp whvp::emu)
 ```

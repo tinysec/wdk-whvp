@@ -21,13 +21,7 @@ function(_whvp_add_imported_library target_name library_name)
     endif()
 endfunction()
 
-_whvp_add_imported_library(whvp::WinHvPlatform WinHvPlatform)
-_whvp_add_imported_library(whvp::WinHvEmulation WinHvEmulation)
-
-if(NOT TARGET whvp::whvp)
-    add_library(whvp::whvp INTERFACE IMPORTED)
-    set_target_properties(whvp::whvp PROPERTIES
-        INTERFACE_LINK_LIBRARIES whvp::WinHvPlatform)
-endif()
+_whvp_add_imported_library(whvp::whvp WinHvPlatform)
+_whvp_add_imported_library(whvp::emu WinHvEmulation)
 
 check_required_components("@PROJECT_NAME@")
