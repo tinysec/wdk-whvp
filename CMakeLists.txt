@@ -31,15 +31,11 @@ function(_whvp_add_imported_library target_name library_name)
         INTERFACE_INCLUDE_DIRECTORIES "${WHVP_INCLUDE_DIR}")
 endfunction()
 
-_whvp_add_imported_library(whvp_WinHvPlatform WinHvPlatform)
-add_library(whvp::WinHvPlatform ALIAS whvp_WinHvPlatform)
+_whvp_add_imported_library(whvp_platform WinHvPlatform)
+add_library(whvp::whvp ALIAS whvp_platform)
 
-_whvp_add_imported_library(whvp_WinHvEmulation WinHvEmulation)
-add_library(whvp::WinHvEmulation ALIAS whvp_WinHvEmulation)
-
-add_library(whvp_interface INTERFACE)
-target_link_libraries(whvp_interface INTERFACE whvp_WinHvPlatform)
-add_library(whvp::whvp ALIAS whvp_interface)
+_whvp_add_imported_library(whvp_emu WinHvEmulation)
+add_library(whvp::emu ALIAS whvp_emu)
 
 if(WHVP_INSTALL)
     install(
@@ -50,8 +46,7 @@ if(WHVP_INSTALL)
         DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/lib/"
         DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         FILES_MATCHING
-            PATTERN "*.lib"
-            PATTERN "*.def")
+            PATTERN "*.lib")
 
     include(CMakePackageConfigHelpers)
 
