@@ -1,0 +1,6 @@
+build*/
+out/
+.local-tests/
+*.user
+*.suo
+*.vcxproj.user
