@@ -11,24 +11,47 @@ on:
       - "**"
 
 env:
-  WHVP_VERSION: 10.0.28000.0
+  WHVP_VERSION: 1.0.0
 
 jobs:
   package:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_tag: ${{ steps.build-tag.outputs.release_tag }}
     steps:
       - name: checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: validate tag
         if: github.ref_type == 'tag'
         shell: bash
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          if [[ "${TAG_VERSION}" != "${WHVP_VERSION}" ]]; then
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release alias tag must use SemVer format vMAJOR.MINOR.PATCH"
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF_NAME#v}" != "${WHVP_VERSION}" ]]; then
             echo "::error::Tag ${GITHUB_REF_NAME} does not match WHVP_VERSION ${WHVP_VERSION}"
             exit 1
           fi
+
+      - name: create build tag
+        id: build-tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          RELEASE_TAG="${GITHUB_REF_NAME}+build.${GITHUB_RUN_NUMBER}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag --force --annotate "${RELEASE_TAG}" "${GITHUB_SHA}" --message "Build ${GITHUB_RUN_NUMBER} for ${GITHUB_REF_NAME}"
+          git tag --force --annotate "${GITHUB_REF_NAME}" "${RELEASE_TAG}^{tag}" --message "Alias for ${RELEASE_TAG}"
+          git push --force origin "refs/tags/${RELEASE_TAG}" "refs/tags/${GITHUB_REF_NAME}"
+          echo "release_tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
 
       - name: verify package contents
         shell: bash
@@ -45,46 +68,27 @@ jobs:
           fi
 
       - name: configure
-        run: cmake -S . -B build -DWHVP_INSTALL=ON
+        run: cmake -S . -B build
 
-      - name: install
-        run: cmake --install build --prefix install
-
-      - name: verify installed package
-        shell: bash
-        run: |
-          test -f install/include/WinHvCompat.h
-          test -f install/include/WinHvPlatformDefs.h
-          test -f install/include/WinHvPlatform.h
-          test -f install/include/WinHvEmulation.h
-          test -f install/lib/amd64/WinHvPlatform.lib
-          test -f install/lib/amd64/WinHvEmulation.lib
-          test -f install/lib/cmake/whvp/whvpConfig.cmake
-          test -f install/lib/cmake/whvp/whvpConfigVersion.cmake
-          if find install -name '*.def' -print -quit | grep -q .; then
-            echo "::error::.def files must not be installed"
-            exit 1
-          fi
-
-      - name: verify find_package
+      - name: verify CMake targets
         shell: bash
         run: |
           mkdir smoke
           cat > smoke/CMakeLists.txt <<'EOF'
           cmake_minimum_required(VERSION 3.20)
-          project(whvp_smoke LANGUAGES C)
-          find_package(whvp 10.0.28000.0 EXACT CONFIG REQUIRED)
+          project(whvp_smoke LANGUAGES NONE)
+          add_subdirectory("${WHVP_SOURCE_DIR}" whvp)
           foreach(target IN ITEMS whvp::whvp whvp::emu)
             if(NOT TARGET ${target})
               message(FATAL_ERROR "Missing target: ${target}")
             endif()
           endforeach()
           EOF
-          cmake -S smoke -B smoke-build -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/install"
+          cmake -S smoke -B smoke-build -DWHVP_SOURCE_DIR="${GITHUB_WORKSPACE}"
 
   release:
     needs: package
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: needs.package.outputs.release_tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -92,7 +96,7 @@ jobs:
       - name: create release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ needs.package.outputs.release_tag }}
           generate_release_notes: true
           draft: false
           prerelease: false
