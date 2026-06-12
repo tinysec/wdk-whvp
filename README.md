@@ -35,7 +35,7 @@ include(FetchContent)
 FetchContent_Declare(
     whvp
     GIT_REPOSITORY https://github.com/tinysec/wdk-whvp.git
-    GIT_TAG v1.0.0)
+    GIT_TAG v0.1.0)
 FetchContent_MakeAvailable(whvp)
 
 target_link_libraries(your_target PRIVATE whvp::whvp)

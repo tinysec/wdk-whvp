@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(whvp VERSION 1.0.0 LANGUAGES NONE)
+project(whvp VERSION 0.1.0 LANGUAGES NONE)
 
 if(DEFINED WDK7_ARCH AND NOT WDK7_ARCH STREQUAL "amd64")
     message(FATAL_ERROR "wdk-whvp only provides amd64 import libraries.")
