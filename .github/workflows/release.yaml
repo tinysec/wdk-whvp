@@ -4,54 +4,22 @@ on:
   push:
     branches:
       - "**"
-    tags:
-      - "v*"
   pull_request:
     branches:
       - "**"
 
 env:
   WHVP_VERSION: 0.1.0
+  FLOATING_TAG: v0.1.0
 
 jobs:
   package:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-    outputs:
-      release_tag: ${{ steps.build-tag.outputs.release_tag }}
+      contents: read
     steps:
       - name: checkout
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: validate tag
-        if: github.ref_type == 'tag'
-        shell: bash
-        run: |
-          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Release alias tag must use SemVer format vMAJOR.MINOR.PATCH"
-            exit 1
-          fi
-
-          if [[ "${GITHUB_REF_NAME#v}" != "${WHVP_VERSION}" ]]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match WHVP_VERSION ${WHVP_VERSION}"
-            exit 1
-          fi
-
-      - name: create build tag
-        id: build-tag
-        if: github.ref_type == 'tag'
-        shell: bash
-        run: |
-          RELEASE_TAG="${GITHUB_REF_NAME}+build.${GITHUB_RUN_NUMBER}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag --force --annotate "${RELEASE_TAG}" "${GITHUB_SHA}" --message "Build ${GITHUB_RUN_NUMBER} for ${GITHUB_REF_NAME}"
-          git tag --force --annotate "${GITHUB_REF_NAME}" "${RELEASE_TAG}^{tag}" --message "Alias for ${RELEASE_TAG}"
-          git push --force origin "refs/tags/${RELEASE_TAG}" "refs/tags/${GITHUB_REF_NAME}"
-          echo "release_tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
 
       - name: verify package contents
         shell: bash
@@ -88,15 +56,44 @@ jobs:
 
   release:
     needs: package
-    if: needs.package.outputs.release_tag != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: create release
-        uses: softprops/action-gh-release@v1
+      - name: checkout
+        uses: actions/checkout@v5
         with:
-          tag_name: ${{ needs.package.outputs.release_tag }}
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+          fetch-depth: 0
+
+      - name: publish versioned build and floating aliases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BUILD_VERSION="${WHVP_VERSION}.${GITHUB_RUN_NUMBER}"
+          BUILD_TAG="v${BUILD_VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag "${BUILD_TAG}" "${GITHUB_SHA}"
+          git push origin "refs/tags/${BUILD_TAG}"
+
+          gh release create "${BUILD_TAG}" \
+            --title "${BUILD_TAG}" \
+            --latest \
+            --generate-notes
+
+          gh release delete "${FLOATING_TAG}" --yes || true
+          git push origin ":refs/tags/${FLOATING_TAG}" || true
+
+          git tag -f "${FLOATING_TAG}" "${GITHUB_SHA}"
+          git push origin "refs/tags/${FLOATING_TAG}"
+
+          gh release create "${FLOATING_TAG}" \
+            --title "${FLOATING_TAG}" \
+            --latest=false \
+            --notes "Floating wdk-whvp ${WHVP_VERSION} release. Always points to the latest build (${BUILD_TAG})."
